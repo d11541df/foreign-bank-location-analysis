@@ -1,0 +1,31 @@
+import pandas as pd
+import numpy as np
+
+
+df = pd.read_csv('powe.csv')
+df
+
+num_sum = df['유동인구'].sum()
+num_sum
+
+df['rates'] = df['유동인구'] / num_sum
+df
+
+df2 = pd.read_csv('../../team_share/ETA/시계열분석/arima_최종_유동인구.csv')
+df2
+
+
+df2.rename(columns={df2.columns[0]: '시군구명'}, inplace=True)
+df2
+
+
+total = df2.loc[df2['시군구명'] =='서초구', '유동인구'].sum()
+total
+
+df['유동인구'] = total * df['rates']
+df
+
+df.drop(df.columns[-1], axis=1,inplace=True)
+df
+
+df.to_csv('powe2024.csv', index=False)

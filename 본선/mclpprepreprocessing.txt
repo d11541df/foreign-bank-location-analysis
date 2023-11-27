@@ -1,0 +1,20 @@
+import pandas as pd
+
+df = pd.read_csv('../2021.csv')
+df
+
+df = df[df["시군구명"] == '서초구']
+df
+
+points = df[['Cell_center_X','Cell_center_Y']].copy()
+points
+
+weights = df[['유동인구']].copy()
+weights
+
+powe = df[['Cell_center_X','Cell_center_Y','유동인구']].copy()
+powe
+
+points.to_csv('points.csv', index=False)
+weights.to_csv('weights.csv', index=False)
+powe.to_csv('powe.csv', index=False)

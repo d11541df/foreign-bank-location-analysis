@@ -1,0 +1,287 @@
+import pandas as pd
+import sys
+import time
+from sklearn.metrics.pairwise import euclidean_distances
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy import random
+from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon, Point
+from matplotlib import pyplot as plt
+
+#################################
+
+def generate_candidate_sites(points,M):
+    hull = ConvexHull(points)
+    polygon_points = points[hull.vertices]
+    poly = Polygon(polygon_points)
+    min_x, min_y, max_x, max_y = poly.bounds
+    sites = []
+    while len(sites) < M:
+        random_point = Point([random.uniform(min_x, max_x),
+                             random.uniform(min_y, max_y)])
+        if (random_point.within(poly)):
+            sites.append(random_point)
+    return np.array([(p.x,p.y) for p in sites])
+
+def plot_input(points):
+    fig = plt.figure(figsize=(8,8))
+    plt.scatter(points[:,0],points[:,1],c='C0')
+    ax = plt.gca()
+    ax.axis('equal')
+    ax.tick_params(axis='both',left=False, top=False, right=False,
+                       bottom=False, labelleft=False, labeltop=False,
+                       labelright=False, labelbottom=False)
+    
+def plot_result(points,opt_sites,radius):
+    
+    fig = plt.figure(figsize=(8,8))
+    plt.scatter(points[:,0],points[:,1],c='C0')
+    ax = plt.gca()
+    plt.scatter(opt_sites[:,0],opt_sites[:,1],c='C1',marker='+')
+    for site in opt_sites:
+        circle = plt.Circle(site, radius, color='C1',fill=False,lw=2)
+        ax.add_artist(circle)
+    ax.axis('equal')
+    ax.tick_params(axis='both',left=False, top=False, right=False,
+                       bottom=False, labelleft=False, labeltop=False,
+                       labelright=False, labelbottom=False)
+                       
+                       
+###############################
+
+costumers = pd.read_csv('powe2024.csv', header=None)
+costumers.rename(columns={0: 'X', 1: 'Y', 2: 'weights'}, inplace=True)
+
+# 첫 번째 행의 컬럼명 삭제
+costumers = costumers.drop(0)  # 첫 번째 행 삭제
+
+costumerscoords = costumers[['X', 'Y']]
+
+print(costumerscoords)
+# NumPy 배열로 변환
+points = costumerscoords[costumerscoords.columns[0:2]].values
+
+
+# 데이터 형식 변경 (object → float)
+points = points.astype(float)
+
+
+
+plot_input(points)
+weights = costumers[['weights']].values
+
+#points
+#weights = costumers[costumers[2]].values
+#weights
+
+###################################
+
+
+weights_float = weights.astype(float)
+total_weights = weights_float.sum()
+total_weights
+
+#############################
+
+######################################
+
+
+# points 영역내에서 M개의 지점 생성
+np.random.seed(19)  # 시드를 설정하여 재현 가능한 결과를 얻습니다.
+
+M = 5000
+se = generate_candidate_sites(points,M)
+
+plot_input(se)
+
+################################
+
+
+######################################
+
+posiblelocations = pd.DataFrame(se, columns=['X', 'Y'])
+
+info = list(posiblelocations.columns)
+n = len(points)
+m = M
+print(posiblelocations)
+
+#####################################
+
+# Initialize the plot
+plt.rcParams["figure.figsize"] = [5, 5]
+plt.rcParams["figure.autolayout"] = True
+
+
+# Initialize the final results
+totalcoverednodes = 0
+totalpopulationserved = 0
+
+# initialize time 이거 아래로 내리자
+time_start = time.perf_counter()
+
+
+
+# maximumdistance = r = 1000m = 1/111 (위도경도 기준)
+maximumdistance = 1 / 111
+
+#facilities = K?
+facilities = 2
+
+##################################
+
+
+start_time = time.time()
+
+## # Compute distances
+dist2 = euclidean_distances(posiblelocations, costumerscoords)
+#dist2 = euclidean_distances(costumerscoords, posiblelocations)
+
+
+dfheuristic = pd.DataFrame()
+
+# 조건에 따라 1 또는 0으로 변환
+result = np.where(dist2 <= maximumdistance, 1, 0)
+
+df_test = pd.DataFrame(result, columns=costumers.index, index=posiblelocations.index)
+
+
+df_test['weights'] = 0
+
+df2 = pd.DataFrame(weights)
+df2.columns = ['weights']
+#df2['weights'] =1
+
+df_test['weights'] = df_test['weights'].astype(float)
+df2['weights'] = df2['weights'].astype(float)
+
+# total 컬럼 추가 및 계산
+# df_test["coverednodes"] = np.sum(df_test, axis=1)
+
+for index, row in df_test.iterrows():
+    for col in df_test.columns[:-1]: #마지막 열 제외
+        if row[col] ==1:
+            df_test.at[index, 'weights'] += df2.at[df_test.columns.get_loc(col), 'weights']
+
+#print(df_test)
+
+df_test.sort_values(by=['weights'],ascending=False, inplace=True)
+
+#totalpopulationserved
+for _ in range(facilities):
+
+    dfheuristic = pd.concat([dfheuristic, df_test.iloc[:1, :]])
+
+    # 첫 번째 행의 index를 가져옵니다.
+    selected_index = df_test.index[0]
+
+    # 첫 번째 행에서 값이 1인 컬럼을 가져옵니다.
+    selected_columns = df_test.columns[df_test.loc[selected_index] == 1]
+
+    # 해당 컬럼의 값을 0으로 수정합니다.
+    df_test.loc[:, selected_columns] = 0
+
+    
+    df_test['weights'] = 0
+
+    for index, row in df_test.iterrows():
+        for col in df_test.columns[:-1]: #마지막 열 제외
+            if row[col] ==1:
+                df_test.at[index, 'weights'] += df2.at[df_test.columns.get_loc(col), 'weights']
+
+
+    # coverednodes 컬럼 추가 및 계산
+    ################################# 여기서 weight 곱하면 될듯!
+    #df_test["coverednodes"] = np.sum(df_test.drop("weights", axis=1), axis=1)
+    
+    df_test.sort_values(by=['weights'], ascending=False, inplace=True)
+    #print(df_test)
+
+    df_test = df_test.iloc[1:, :]
+    
+
+
+    
+selected_coords = posiblelocations.loc[dfheuristic.index]
+print(dfheuristic.index)
+print(costumerscoords.shape)
+
+#total_coverednodes = dfheuristic['coverednodes'].sum()
+totalpopulationserved = dfheuristic['weights'].sum()
+end_time = time.time()
+
+print("총 소요시간 : ")
+print(end_time -start_time)
+
+
+######################################
+dfheuristic
+
+######################################
+
+
+
+# Initial Plot
+# 열의 형식 변경 (예: 'A' 열을 float로 변경)
+costumers['X'] = costumers['X'].astype(float)
+costumers['Y'] = costumers['Y'].astype(float)
+
+
+plt.plot(costumers['X'].values.tolist(),
+         costumers['Y'].values.tolist(), 'r.', label='Demanded Nodes')
+plt.plot(posiblelocations['X'].values.tolist(
+), posiblelocations['Y'].values.tolist(), 'b*', label='Available Facilities')
+plt.title('MCLP-Initial State')
+plt.legend(loc="upper left")
+plt.show()
+
+######################################
+points
+######################################
+######################################
+qwe = costumers[costumers.columns[0:2]]
+######################################
+selected_coords['X'] = selected_coords['X'].astype(float)
+selected_coords['Y'] = selected_coords['Y'].astype(float)
+sum_of_weights = dfheuristic['weights'].sum()
+
+
+qqq =qwe.values
+www = selected_coords.values
+plot_result(qqq,www, maximumdistance)
+print('노드 수(N) : ', n)
+print('입지후보수(M) : ', M)
+print('R : ', maximumdistance)
+print('K : ', facilities)
+print('C : ', totalpopulationserved)
+print('커버율(%) : ', (totalpopulationserved / total_weights))
+plt.savefig('scatter_plot.png')
+######################################
+
+posiblelocations.loc[dfheuristic.index, 'weights'] = dfheuristic['weights']
+posiblelocations.isna().sum()
+
+
+result_df = posiblelocations.loc[dfheuristic.index]
+result_df
+####################################
+
+
+result_df['K'] = range(1, 16)
+result_df['cumulative_weights'] = result_df['weights'].cumsum()
+
+plt.bar(result_df['K'], result_df['cumulative_weights'])
+plt.xlabel('K Values')
+plt.ylabel('Cumulative Weights')
+
+plt.show()
+
+######################
+
+
+plt.bar(result_df['K'], result_df['weights'])
+plt.xlabel('K Values')
+plt.ylabel('Weights')
+plt.show()
+plt.savefig('bar_plot.png')
